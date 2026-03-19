@@ -1,14 +1,14 @@
 #include "CLR1.hpp"
 #include "LRCommon.hpp"
 
-namespace SLR1 {
+namespace CLR1 {
 
 ParsingTable generate(Grammar& grammar) {
-    LRCommon::CanonicalCollection cc = LRCommon::buildLR0Collection(grammar);
+    LRCommon::CanonicalCollection cc = LRCommon::buildLR1Collection(grammar);
     ParsingTable table;
     LRCommon::populateShiftsAndGotos(table, cc, grammar);
     
-    // Reductions: only on symbols in FOLLOW(A) for rule A -> alpha .
+    // Reductions: only on the specific lookahead symbol
     for (size_t i = 0; i < cc.states.size(); ++i) {
         for (const auto& item : cc.states[i]) {
             const Rule& rule = grammar.rules[item.ruleId];
@@ -17,9 +17,8 @@ ParsingTable generate(Grammar& grammar) {
             if (rule.lhs == grammar.augmentedStart) {
                 table.addAction(i, "$", {ActionType::ACCEPT, 0});
             } else {
-                const auto& follow = grammar.followSets[rule.lhs];
-                for (const auto& t : follow) {
-                    table.addAction(i, t, {ActionType::REDUCE, item.ruleId});
+                for (const auto& la : item.lookahead) {
+                    table.addAction(i, la, {ActionType::REDUCE, item.ruleId});
                 }
             }
         }
@@ -29,4 +28,4 @@ ParsingTable generate(Grammar& grammar) {
     return table;
 }
 
-}
+} // namespace CLR1
