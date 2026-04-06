@@ -3,11 +3,11 @@ import tkinter as tk
 from tkinter import ttk
 import json, subprocess, threading, os, sys, datetime, re
 
-# ── APPEARANCE ────────────────────────────────────────────────────────────────
+#APPEARANCE 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("green")
 
-# ── FONTS ─────────────────────────────────────────────────────────────────────
+#FONTS 
 FONT_HEADING = ("Segoe UI", 26, "bold")
 FONT_SUBHEAD = ("Segoe UI", 18, "bold")
 FONT_BODY    = ("Segoe UI", 15)
@@ -15,7 +15,7 @@ FONT_SMALL   = ("Segoe UI", 13)
 FONT_BTN     = ("Segoe UI", 14, "bold")
 FONT_MONO    = ("Consolas", 13)
 
-# ── DARK GREEN PALETTE ────────────────────────────────────────────────────────
+# THEME
 BG       = "#0D1117"   # near-black canvas
 PANEL    = "#161B22"   # card surface
 PANEL2   = "#1C2430"   # slightly lighter card
@@ -38,7 +38,7 @@ BACKEND = os.path.join(
 )
 
 
-# ── GRAMMAR VALIDATOR ─────────────────────────────────────────────────────────
+# GRAMMAR VALIDATOR:ensuring the format of grammar is correct  
 def validate_grammar(text: str):
     lines = text.strip().splitlines()
     if not lines:
@@ -74,7 +74,7 @@ def validate_grammar(text: str):
     return True, ""
 
 
-# ── BACKEND ───────────────────────────────────────────────────────────────────
+# BACKEND 
 def run_parser(grammar: str, method: str) -> dict:
     try:
         p = subprocess.run([BACKEND, method], input=grammar,
@@ -97,7 +97,7 @@ def run_all_parsers(grammar: str) -> dict:
     return {m: run_parser(grammar, m) for m in PARSERS}
 
 
-# ── SHARED UI HELPERS ─────────────────────────────────────────────────────────
+#  SHARED UI HELPERS 
 def section_label(parent, text):
     bar = ctk.CTkFrame(parent, fg_color=ACCENT, corner_radius=6)
     bar.pack(fill="x", padx=10, pady=(12, 4))
@@ -173,7 +173,7 @@ def bar_chart(parent, title, data: dict, color):
                        text=str(val), anchor="w", font=("Consolas", 16), fill=TEXT)
 
 
-# ── MAIN APP ──────────────────────────────────────────────────────────────────
+# MAIN APP 
 class ScalrApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -185,7 +185,7 @@ class ScalrApp(ctk.CTk):
         self.grammar = ""
         self._build()
 
-    # ── LAYOUT ────────────────────────────────────────────────────────────────
+    #  LAYOUT 
     def _build(self):
         # Header
         hdr = ctk.CTkFrame(self, fg_color="#0A0E14", corner_radius=0, height=58)
@@ -236,7 +236,7 @@ class ScalrApp(ctk.CTk):
                 fg_color=TAB_ACT if active else TAB_IN,
                 text_color=TEXT   if active else MUTED)
 
-    # ── EDITOR PAGE ───────────────────────────────────────────────────────────
+    #  EDITOR PAGE 
     def _build_editor(self, parent):
         page  = ctk.CTkFrame(parent, fg_color=BG, corner_radius=0)
         inner = ctk.CTkFrame(page, fg_color=BG)
@@ -311,7 +311,7 @@ class ScalrApp(ctk.CTk):
         self.log_box.delete("1.0", "end")
         self.log_box.configure(state="disabled")
 
-    # ── SUBMIT & BACKGROUND ───────────────────────────────────────────────────
+    #  SUBMIT & BACKGROUND 
     def _submit(self):
         grammar = self.editor.get("1.0", "end").strip()
         if not grammar:
@@ -360,7 +360,7 @@ class ScalrApp(ctk.CTk):
         self.prog.stop(); self.prog.pack_forget()
         self.run_btn.configure(state="normal")
 
-        # Binary missing?
+        # Binary missing: handle error
         for r in results.values():
             if r.get("status") == "error" and "not found" in r.get("message", "").lower():
                 self._log("Backend binary not found!", "error")
@@ -385,7 +385,7 @@ class ScalrApp(ctk.CTk):
         self.status_var.set("✓  Done — see Results / Analytics / Detailed View.")
         self._refresh_d1(); self._refresh_d2(); self._refresh_d3()
 
-    # ── RESULTS PAGE (D1) ─────────────────────────────────────────────────────
+    #  RESULTS PAGE (Dashboard1)
     def _build_d1(self, parent):
         page = ctk.CTkFrame(parent, fg_color=BG, corner_radius=0)
         self.d1_scroll = ctk.CTkScrollableFrame(page, fg_color=BG)
@@ -443,7 +443,7 @@ class ScalrApp(ctk.CTk):
                 return m, desc[m]
         return "None", "No LR parser handles this grammar without conflicts. It may be inherently ambiguous."
 
-    # ── ANALYTICS PAGE (D2) ───────────────────────────────────────────────────
+    #  ANALYTICS PAGE (Dashboard2) 
     def _build_d2(self, parent):
         page = ctk.CTkFrame(parent, fg_color=BG, corner_radius=0)
         self.d2_scroll = ctk.CTkScrollableFrame(page, fg_color=BG)
@@ -485,7 +485,7 @@ class ScalrApp(ctk.CTk):
             data = {m: round(self.results[m].get("meta", {}).get(key, 0), 3) for m in PARSERS}
             bar_chart(sc, title, data, color)
 
-    # ── DETAILED VIEW PAGE (D3) ───────────────────────────────────────────────
+    #  DETAILED VIEW PAGE:parse tabke (Dashboard3) 
     def _build_d3(self, parent):
         page = ctk.CTkFrame(parent, fg_color=BG, corner_radius=0)
         sel  = ctk.CTkFrame(page, fg_color=PANEL, corner_radius=0, height=46)
