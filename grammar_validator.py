@@ -53,6 +53,35 @@ def validate_grammar(text: str) -> tuple[bool, str]:
             else:
                 duplicate_detector.add(rule_str)
                 parts = alt.split()
+
+                # Detect accidentally space-separated terminals
+                # e.g., "i    d" split into ['i', 'd'] — likely meant "id" or "i | d"
+                consecutive_singles = []
+                for idx, p in enumerate(parts):
+                    if len(p) == 1 and p.islower():
+                        consecutive_singles.append(p)
+                    else:
+                        if len(consecutive_singles) >= 2:
+                            merged = ''.join(consecutive_singles)
+                            piped  = ' | '.join(consecutive_singles)
+                            errors.append(
+                                f"Line {i}: Suspicious sequence of single-character terminals "
+                                f"'{' '.join(consecutive_singles)}' in '{alt}'. "
+                                f"Did you mean the terminal '{merged}' (no spaces), "
+                                f"or separate alternatives '{piped}' (use | to delimit)?"
+                            )
+                        consecutive_singles = []
+                # Check trailing run
+                if len(consecutive_singles) >= 2:
+                    merged = ''.join(consecutive_singles)
+                    piped  = ' | '.join(consecutive_singles)
+                    errors.append(
+                        f"Line {i}: Suspicious sequence of single-character terminals "
+                        f"'{' '.join(consecutive_singles)}' in '{alt}'. "
+                        f"Did you mean the terminal '{merged}' (no spaces), "
+                        f"or separate alternatives '{piped}' (use | to delimit)?"
+                    )
+
                 parsed_rules.append((lhs, parts))
                 for symbol in parts:
                     used_symbols.add(symbol)
@@ -125,6 +154,52 @@ def validate_grammar(text: str) -> tuple[bool, str]:
         return False, format_errors(errors)
 
     return True, ""
+
+def validate_input_string(grammar_text: str, input_str: str) -> tuple[bool, str]:
+    """Check that every token in the input string is a valid terminal in the grammar."""
+    if not input_str.strip():
+        return True, ""  # empty input is fine (optional)
+
+    # Extract defined non-terminals (LHS symbols)
+    lines = [line.strip() for line in grammar_text.splitlines() if line.strip()]
+    defined_nonterminals = set()
+    all_rhs_symbols = set()
+
+    for line in lines:
+        if '->' not in line:
+            continue
+        lhs, rhs = (p.strip() for p in line.split('->', 1))
+        if lhs:
+            defined_nonterminals.add(lhs)
+        alternatives = [a.strip() for a in rhs.split('|')]
+        for alt in alternatives:
+            for sym in alt.split():
+                if sym and sym not in ('epsilon', 'ε'):
+                    all_rhs_symbols.add(sym)
+
+    # Terminals = symbols that appear on RHS but are never on LHS
+    terminals = all_rhs_symbols - defined_nonterminals
+
+    if not terminals:
+        return True, ""  # no terminals deduced, skip check
+
+    # Check each token in the input string
+    input_tokens = input_str.strip().split()
+    invalid_tokens = []
+    for tok in input_tokens:
+        if tok not in terminals:
+            invalid_tokens.append(tok)
+
+    if invalid_tokens:
+        unique_invalid = list(dict.fromkeys(invalid_tokens))  # preserve order, deduplicate
+        return False, (
+            f"Input string contains tokens not found in the grammar's terminals.\n"
+            f"Invalid token(s): {', '.join(repr(t) for t in unique_invalid)}\n"
+            f"Valid terminals: {{ {', '.join(sorted(terminals))} }}"
+        )
+
+    return True, ""
+
 
 def format_errors(errors):
     msg = "\n".join(errors[:6])

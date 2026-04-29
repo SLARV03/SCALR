@@ -32,14 +32,24 @@ TAB_ACT  = "#238636"
 TAB_IN   = "#161B22"
 
 PARSERS = ["LR0", "SLR1", "LALR1", "CLR1"]
-BACKEND = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)),
-    "scalr.exe" if sys.platform == "win32" else "scalr"
-)
+def get_backend_path():
+    if getattr(sys, 'frozen', False):
+        # Running in a bundle (PyInstaller)
+        base_path = sys._MEIPASS
+    else:
+        # Running in normal python environment
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    
+    return os.path.join(
+        base_path,
+        "scalr.exe" if sys.platform == "win32" else "scalr"
+    )
+
+BACKEND = get_backend_path()
 
 
 # GRAMMAR VALIDATOR: imported from grammar_validator.py
-from grammar_validator import validate_grammar
+from grammar_validator import validate_grammar, validate_input_string
 
 
 # BACKEND 
@@ -83,6 +93,12 @@ def run_all_parsers(grammar: str, input_str: str) -> dict:
         return {m: {"status": "error", "message": msg} for m in PARSERS}
     except Exception as e:
         return {m: {"status": "error", "message": str(e)} for m in PARSERS}
+
+
+def run_single_parser(grammar: str, input_str: str, method: str) -> dict:
+    """Run backend and extract only one parser's result."""
+    all_results = run_all_parsers(grammar, input_str)
+    return {method: all_results.get(method, {"status": "error", "message": f"No data for {method}"})}
 
 
 #  SHARED UI HELPERS 
@@ -171,6 +187,7 @@ class ScalrApp(ctk.CTk):
         self.configure(fg_color=BG)
         self.results = {}
         self.grammar = ""
+        self.selected_parser = "All Parsers"   # dropdown state
         self._build()
 
     #  LAYOUT 
@@ -192,7 +209,8 @@ class ScalrApp(ctk.CTk):
         tab_bar.pack(fill="x")
         tab_bar.pack_propagate(False)
         self.tab_btns = {}
-        for label in ["Editor", "Results", "Analytics", "Detailed View", "Parse Tree"]:
+        self.ALL_TABS = ["Editor", "Results", "Analytics", "Detailed View", "Parse Tree"]
+        for label in self.ALL_TABS:
             btn = ctk.CTkButton(
                 tab_bar, text=label, font=FONT_BTN,
                 fg_color=TAB_IN, text_color=MUTED,
@@ -216,14 +234,48 @@ class ScalrApp(ctk.CTk):
         self._switch_tab("Editor")
 
     def _switch_tab(self, label):
+        # Determine which tabs are restricted
+        restricted = self._get_restricted_tabs()
+        if label in restricted:
+            return  # block navigation to restricted tabs
+
         for page in self.pages.values():
             page.pack_forget()
         self.pages[label].pack(fill="both", expand=True)
         for name, btn in self.tab_btns.items():
             active = name == label
-            btn.configure(
-                fg_color=TAB_ACT if active else TAB_IN,
-                text_color=TEXT   if active else MUTED)
+            is_restricted = name in restricted
+            if is_restricted:
+                btn.configure(
+                    fg_color="#0D1117", text_color="#3D444D")  # greyed-out look
+            else:
+                btn.configure(
+                    fg_color=TAB_ACT if active else TAB_IN,
+                    text_color=TEXT   if active else MUTED)
+
+    def _get_restricted_tabs(self):
+        """Return set of tab names that should be inaccessible given the current parser selection."""
+        if self.selected_parser == "All Parsers":
+            return set()
+        # When a specific parser is chosen, Results & Analytics are comparison dashboards — disable them
+        return {"Results", "Analytics"}
+
+    def _on_parser_dropdown_changed(self, choice):
+        self.selected_parser = choice
+        restricted = self._get_restricted_tabs()
+        # If current page is now restricted, bounce back to Editor
+        for name, page in self.pages.items():
+            if page.winfo_ismapped() and name in restricted:
+                self._switch_tab("Editor")
+                return
+        # Refresh tab button appearances
+        self._switch_tab(self._get_current_tab())
+
+    def _get_current_tab(self):
+        for name, page in self.pages.items():
+            if page.winfo_ismapped():
+                return name
+        return "Editor"
 
     #  EDITOR PAGE 
     def _build_editor(self, parent):
@@ -259,6 +311,21 @@ class ScalrApp(ctk.CTk):
 
         btn_row = ctk.CTkFrame(inner, fg_color=BG)
         btn_row.pack(fill="x", pady=10)
+
+        # Parser generator dropdown
+        parser_choices = ["All Parsers"] + PARSERS
+        self.parser_dropdown = ctk.CTkOptionMenu(
+            btn_row, values=parser_choices,
+            font=FONT_BTN, dropdown_font=FONT_BODY,
+            fg_color=PANEL2, button_color=ACCENT,
+            button_hover_color=ACCENT2,
+            text_color=TEXT, dropdown_fg_color=PANEL,
+            dropdown_text_color=TEXT, dropdown_hover_color=ACCENT2,
+            corner_radius=8, height=40, width=160,
+            command=self._on_parser_dropdown_changed)
+        self.parser_dropdown.set("All Parsers")
+        self.parser_dropdown.pack(side="left", padx=(0, 10))
+
         self.run_btn = ctk.CTkButton(
             btn_row, text="▶  Analyse Grammar", font=FONT_BTN,
             fg_color=ACCENT, hover_color=ACCENT2,
@@ -325,15 +392,33 @@ class ScalrApp(ctk.CTk):
             for ln in err_msg.splitlines():
                 if ln.strip():
                     self._log("  " + ln.strip(), "error")
-            self.status_var.set("✗  Grammar has format errors — see log below.")
+            self.status_var.set("✗  Grammar or Input String has format errors — see log below.")
             # Show error state on all dashboards immediately
             self._show_grammar_error(err_msg)
             return
 
+        # Validate input string terminals
+        if input_str:
+            valid_input, input_err = validate_input_string(grammar, input_str)
+            if not valid_input:
+                self._log("─" * 50)
+                self._log("Input string validation failed:", "error")
+                for ln in input_err.splitlines():
+                    if ln.strip():
+                        self._log("  " + ln.strip(), "error")
+                self.status_var.set("✗  Input string has invalid tokens — see log below.")
+                self._show_grammar_error(input_err)
+                return
+
         self._log("─" * 50)
-        self._log("Grammar accepted. Running all 4 parsers...", "info")
+        selected = self.selected_parser
+        if selected == "All Parsers":
+            self._log("Grammar accepted. Running all 4 parsers...", "info")
+            self.status_var.set("Running all parsers…")
+        else:
+            self._log(f"Grammar accepted. Running {selected} parser...", "info")
+            self.status_var.set(f"Running {selected}…")
         self.grammar = grammar
-        self.status_var.set("Running all parsers…")
         self.run_btn.configure(state="disabled")
         self.prog.pack(fill="x", pady=4)
         self.prog.start()
@@ -352,7 +437,12 @@ class ScalrApp(ctk.CTk):
             error_label(sc, banner)
 
     def _bg(self, grammar, input_str):
-        self.after(0, self._done, run_all_parsers(grammar, input_str))
+        selected = self.selected_parser
+        if selected == "All Parsers":
+            result = run_all_parsers(grammar, input_str)
+        else:
+            result = run_single_parser(grammar, input_str, selected)
+        self.after(0, self._done, result)
 
     def _done(self, results):
         self.results = results
@@ -381,8 +471,22 @@ class ScalrApp(ctk.CTk):
                           "ok" if c == 0 else "warn")
 
         self._log("Analysis complete.", "ok")
-        self.status_var.set("✓  Done — see Results / Analytics / Detailed View / Parse Tree.")
-        self._refresh_d1(); self._refresh_d2(); self._refresh_d3(); self._refresh_parse_tree()
+        selected = self.selected_parser
+        if selected == "All Parsers":
+            self.status_var.set("✓  Done — see Results / Analytics / Detailed View / Parse Tree.")
+            self._refresh_d1(); self._refresh_d2(); self._refresh_d3(); self._refresh_parse_tree()
+        else:
+            self.status_var.set(f"✓  Done — see Detailed View / Parse Tree for {selected}.")
+            # Only refresh the single-parser dashboards, set the selectors to the chosen parser
+            self.d3_sel.set(selected)
+            self.pt_sel.set(selected)
+            self._refresh_d3(); self._refresh_parse_tree()
+            # Clear comparison dashboards
+            for attr in ("d1_scroll", "d2_scroll"):
+                sc = getattr(self, attr, None)
+                if sc:
+                    for w in sc.winfo_children(): w.destroy()
+                    placeholder_label(sc, f"Comparison dashboards are disabled in single-parser mode ({selected}).")
 
     #  RESULTS PAGE (Dashboard1)
     def _build_d1(self, parent):
