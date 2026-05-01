@@ -26,10 +26,10 @@
 
 | | Name | Role |
 |---|---|---|
-| 🧑‍💻 | **Raj** | Core C++ Backend & LR Table Generation |
-| 🧑‍💻 | **Pratyush** | Parser Algorithms & Set Computation |
-| 👩‍💻 | **Palak** | Parse Tree Visualiser & Heatmap |
-| 👩‍💻 | **Diya** | GUI Design & Frontend Integration |
+| 🧑‍💻 | **Raj** | SLR(1) , Core C++ Backend , LR Table Generation |
+| 🧑‍💻 | **Pratyush** | CLR(1) , Grammer Preprocessing |
+| 👩‍💻 | **Palak** | LR(0), Grammer Validator, Lexer |
+| 👩‍💻 | **Diya** | LALR(1), GUI Design |
 
 ---
 
